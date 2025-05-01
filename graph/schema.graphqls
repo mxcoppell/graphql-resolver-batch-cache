@@ -1,0 +1,36 @@
+scalar Date
+
+"""
+Symbol definition metadata
+"""
+type SymbolDefinition {
+  """
+  A unique series of letters assigned to a security for trading purposes. Usually the Ticker.
+  """
+  Name: String!
+
+  """
+  Some other data field
+  """
+  Description: String
+
+  """
+  Upcoming Dividend Date. Fetched from an external source.
+  Set useCache to false to force a nil return on subsequent calls within the same request/event after the first attempt.
+  """
+  NextExDividendDate(useCache: Boolean = true): Date
+}
+
+type Query {
+  """
+  Get a list of symbols (mocked).
+  """
+  symbols(names: [String!]!): [SymbolDefinition!]!
+}
+
+type Subscription {
+  """
+  Subscribe to updates for specific symbols (mocked).
+  """
+  symbolUpdates(names: [String!]!): SymbolDefinition!
+} 

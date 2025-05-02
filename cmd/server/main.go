@@ -10,8 +10,9 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gorilla/websocket"
-	"github.com/mxcoppell/graphql-resolver-batch-cache/graph"
-	"github.com/mxcoppell/graphql-resolver-batch-cache/graph/loaders"
+	customgraph "github.com/mxcoppell/graphql-resolver-batch-cache/internal" // Alias for internal package root
+	"github.com/mxcoppell/graphql-resolver-batch-cache/internal/gen/graph"
+	"github.com/mxcoppell/graphql-resolver-batch-cache/internal/loaders"
 )
 
 const defaultPort = "8080"
@@ -22,8 +23,10 @@ func main() {
 		port = defaultPort
 	}
 
-	// Create a new GraphQL server
-	srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
+	// Create a new GraphQL server using the custom resolver implementation from internal/resolver_root.go
+	// Note: customgraph.NewResolver() returns graph.ResolverRoot which is compatible.
+	resolver := customgraph.NewResolver() // Call the NewResolver from internal/resolver_root.go
+	srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: resolver}))
 
 	// Add WebSocket support for subscriptions
 	srv.AddTransport(transport.Websocket{

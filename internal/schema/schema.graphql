@@ -16,9 +16,9 @@ type SymbolDefinition {
 
   """
   Upcoming Dividend Date. Fetched from an external source.
-  Set useCache to false to force a nil return on subsequent calls within the same request/event after the first attempt.
+  Set singleFlight to false to force a nil return on subsequent calls within the same request/event after the first successful fetch.
   """
-  NextExDividendDate(useCache: Boolean = true): Date
+  NextExDividendDate(singleFlight: Boolean = true): Date
 }
 
 type Query {

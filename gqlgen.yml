@@ -29,8 +29,9 @@ models:
     model:
       - github.com/99designs/gqlgen/graphql.Time # Use standard time for Date scalar
   SymbolDefinition:
-    model:
-      # - github.com/mxcoppell/graphql-resolver-batch-cache/internal/gen/graph/model.SymbolDefinition
+    fields:
+      NextExDividendDate:
+        resolver: true
   ID:
     model:
       - github.com/99designs/gqlgen/graphql.ID
@@ -40,13 +41,3 @@ models:
   Int:
     model:
       - github.com/99designs/gqlgen/graphql.Int32
-# Optional: turn on use `gqlgen` definitions whenever possible
-# user_struct_name: true
-
-# Optional: set this path to force LookForRootName before falling back
-# to standard model detection mechanism.
-# root_package: "github.com/mxcoppell/graphql-resolver-batch-cache"
-
-# Optional: turn on autobinding for default model fields.
-# autobind:
-#  - "github.com/mxcoppell/graphql-resolver-batch-cache/internal/gen/graph/model"

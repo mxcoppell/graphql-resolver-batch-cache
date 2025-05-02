@@ -56,7 +56,7 @@ type symbolDefinitionResolver struct{ *Resolver }
 
 // SymbolDefinition returns the SymbolDefinition resolver implementation.
 // The return type implicitly satisfies the generated interface.
-func (r *Resolver) SymbolDefinition() any {
+func (r *Resolver) SymbolDefinition() graph.SymbolDefinitionResolver {
 	return &symbolDefinitionResolver{r}
 }
 

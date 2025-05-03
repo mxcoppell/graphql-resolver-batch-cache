@@ -10,11 +10,6 @@ type SymbolDefinition {
   Name: String!
 
   """
-  Some other data field
-  """
-  Description: String
-
-  """
   Upcoming Dividend Date. Fetched from an external source.
   Set singleFlight to false to force a nil return on subsequent calls within the same request/event after the first successful fetch.
   """

@@ -2,7 +2,6 @@ package resolvers
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -37,10 +36,8 @@ func SymbolUpdatesImpl(ctx context.Context, names []string) (<-chan *model.Symbo
 				name := names[index]
 
 				// Create a symbol definition (NextExDividendDate will be resolved downstream)
-				desc := fmt.Sprintf("Updated Description for Symbol %s at %s", name, time.Now().Format(time.Kitchen))
 				symbol := &model.SymbolDefinition{
-					Name:        name,
-					Description: &desc,
+					Name: name,
 				}
 
 				// Send it to the channel

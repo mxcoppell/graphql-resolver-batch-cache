@@ -2,7 +2,6 @@ package resolvers
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/mxcoppell/graphql-resolver-batch-cache/internal/gen/graph/model"
@@ -17,10 +16,8 @@ func SymbolsImpl(ctx context.Context, names []string) ([]*model.SymbolDefinition
 	for i, name := range names {
 		// Here we create model objects with just the name filled in
 		// NextExDividendDate will be resolved separately when requested
-		desc := fmt.Sprintf("Description for Symbol %s", name)
 		result[i] = &model.SymbolDefinition{
-			Name:        name,
-			Description: &desc,
+			Name: name,
 		}
 	}
 

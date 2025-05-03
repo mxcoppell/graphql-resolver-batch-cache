@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	// No longer need model import here as Date maps directly to time.Time
-	// model "github.com/mxcoppell/graphql-resolver-batch-cache/gen/graph/model"
 	"github.com/vikstrous/dataloadgen"
 )
 
@@ -50,19 +48,25 @@ func NewDividendDateLoader() *DividendDateLoader {
 
 // LoadDividendDate loads the dividend date for a symbol, handling singleFlight logic
 func (d *DividendDateLoader) LoadDividendDate(ctx context.Context, symbolName string, singleFlight bool) (*time.Time, error) {
-	if !singleFlight {
-		// If singleFlight is false, check if already attempted
-		if d.attemptTracker.IsAttempted(symbolName) {
-			log.Printf("Symbol %s already attempted with singleFlight=false, returning nil", symbolName)
-			return nil, nil // Return nil on subsequent accesses when singleFlight=false
-		}
-		// Mark as attempted ONLY when singleFlight is false, before the first fetch
-		d.attemptTracker.MarkAttempted(symbolName)
-		log.Printf("Symbol %s first attempt with singleFlight=false, marked as attempted", symbolName)
+	// Check if the symbol has already been attempted *in this request*
+	alreadyAttempted := d.attemptTracker.IsAttempted(symbolName)
+
+	if singleFlight && alreadyAttempted {
+		// If singleFlight=true and already attempted, return nil immediately
+		log.Printf("Symbol %s already attempted with singleFlight=true, returning nil", symbolName)
+		return nil, nil
+	} else if !singleFlight && alreadyAttempted {
+		// If singleFlight=false and already attempted, also return nil
+		log.Printf("Symbol %s already attempted with singleFlight=false, returning nil", symbolName)
+		return nil, nil
 	}
 
+	// If we reach here, it's the first attempt for this symbol in this request.
+	// Mark it as attempted regardless of the singleFlight flag.
+	d.attemptTracker.MarkAttempted(symbolName)
+	log.Printf("Symbol %s first attempt (singleFlight=%t), marked as attempted. Fetching...", symbolName, singleFlight)
+
 	// Fetch via dataloader (handles batching and caching for singleFlight=true implicitly)
-	log.Printf("Loading dividend date for %s via dataloader (singleFlight=%v)", symbolName, singleFlight)
 	return d.loader.Load(ctx, symbolName)
 }
 
@@ -71,12 +75,6 @@ func (d *DividendDateLoader) LoadDividendDate(ctx context.Context, symbolName st
 // A more robust implementation might require modifying dataloadgen or a custom batch function.
 // For now, it assumes singleFlight=true behavior for simplicity when calling LoadMany.
 func (d *DividendDateLoader) LoadManyDividendDates(ctx context.Context, symbolNames []string) ([]*time.Time, []error) {
-	// Mark all as attempted - This is slightly incorrect for singleFlight=false logic, as it marks before fetching.
-	// This method might need revisiting depending on precise requirements for LoadMany with singleFlight=false.
-	// for _, name := range symbolNames {
-	// 	d.attemptTracker.MarkAttempted(name)
-	// }
-
 	// Load each one individually using the main Load method (which respects singleFlight=true implicitly)
 	results := make([]*time.Time, len(symbolNames))
 	errors := make([]error, len(symbolNames))
@@ -105,15 +103,19 @@ func fetchDividendDates(ctx context.Context, symbolNames []string) ([]*time.Time
 		var date time.Time
 		if name == "AAPL" {
 			// One month from now
+			log.Printf("Simulating AAPL dividend date for %s", name)
 			date = time.Now().AddDate(0, 1, 0)
 		} else if name == "MSFT" {
 			// Two months from now
+			log.Printf("Simulating MSFT dividend date for %s", name)
 			date = time.Now().AddDate(0, 2, 0)
 		} else if name == "GOOG" {
 			// Three months from now
+			log.Printf("Simulating GOOG dividend date for %s", name)
 			date = time.Now().AddDate(0, 3, 0)
 		} else {
 			// For any other symbol, 6 months from now
+			log.Printf("Simulating dividend date for %s", name)
 			date = time.Now().AddDate(0, 6, 0)
 		}
 		results[i] = &date

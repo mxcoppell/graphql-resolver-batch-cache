@@ -2,7 +2,6 @@ package resolvers
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/mxcoppell/graphql-resolver-batch-cache/internal/gen/graph/model"
@@ -13,8 +12,6 @@ import (
 // This custom implementation is used by registering it with the ResolverRoot.
 // It replaces the auto-generated resolver.
 func NextExDividendDate(ctx context.Context, obj *model.SymbolDefinition, singleFlight *bool) (*time.Time, error) {
-	log.Printf("Resolving NextExDividendDate for symbol %s (singleFlight: %v)", obj.Name, singleFlight)
-
 	// Get the loader from context
 	loader := loaders.For(ctx)
 

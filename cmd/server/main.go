@@ -26,7 +26,15 @@ func main() {
 	// Create a new GraphQL server using the custom resolver implementation from internal/resolver_root.go
 	// Note: customgraph.NewResolver() returns graph.ResolverRoot which is compatible.
 	resolver := customgraph.NewResolver() // Call the NewResolver from internal/resolver_root.go
-	srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: resolver}))
+
+	// Create a handler.Server manually
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: resolver}))
+
+	// Add transports (order might matter depending on routing library)
+	srv.AddTransport(transport.Options{})       // Needs POST, GET, etc. - Options{} provides defaults
+	srv.AddTransport(transport.GET{})           // Explicitly add GET
+	srv.AddTransport(transport.POST{})          // Explicitly add POST
+	srv.AddTransport(transport.MultipartForm{}) // If file uploads are needed
 
 	// Add WebSocket support for subscriptions
 	srv.AddTransport(transport.Websocket{

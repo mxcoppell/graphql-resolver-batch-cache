@@ -72,8 +72,8 @@ But what if you only want the *first* access within that event processing cycle 
 
 *   We added a `singleFlight: Boolean` argument to the `NextExDividendDate` field in our schema (`internal/schema/schema.graphql`).
 *   Inside our custom loader (`internal/loaders/dataloaders.go`), we added an `attemptTracker`.
-*   **If `singleFlight` is `true` (default):** We check the tracker. If attempted, return `nil`. If not, mark as attempted and proceed to fetch/cache via the underlying dataloader.
-*   **If `singleFlight` is `false`:** We *bypass* our attempt tracker logic and just use the standard dataloader behavior (fetch once, then return cached value on subsequent calls within the same request). *Correction based on previous logic:* If `singleFlight` is `false`, we *still* check the tracker. If attempted, we return `nil`. If not, we mark it and fetch via the dataloader. The *key difference* was how the tracker was used. The *current* implementation handles both `true` and `false` by returning `nil` on subsequent attempts within the request.
+*   **If `singleFlight` is `true` (default):** We check the `attemptTracker`. If the key has already been processed *in the current request/event scope*, we return `nil` immediately. If not, we mark it as attempted and proceed to the dataloader (`d.loader.Load`).
+*   **If `singleFlight` is `false`:** We check the `attemptTracker`. If this is the first time processing the key *in the current scope*, we mark it as attempted. Regardless of whether it was already attempted or not, **we always proceed to the dataloader (`d.loader.Load`)**. This allows the dataloader's internal cache (L1) or the shared cache (L2, via the batch function) to return the value on subsequent accesses within the same request/event.
 
 This `attemptTracker` lives alongside the dataloader cache within the `DividendDateLoader` struct, making it request-scoped as well.
 
@@ -115,6 +115,20 @@ flowchart TD
     %% style Y fill:#9cf,stroke:#333,stroke-width:2px
 ```
 
+**Diagram Explanation (Project Flow):**
+
+1.  **Request/Event Scope:** An incoming request/event starts the process. The `Middleware` creates a unique `DividendDateLoader` instance for this scope. This instance holds both the `dataloadgen.Loader` (L1 Cache + Batching) and our `SymbolAttemptTracker`.
+2.  **Resolver Execution:** The resolver gets the scope-specific loader from the context.
+3.  **Attempt Check:** It calls `LoadDividendDate`, which first checks the `SymbolAttemptTracker`.
+4.  **Early Nil:** If the key *was* already attempted in this scope *and* `singleFlight` is true, it returns `nil` immediately.
+5.  **Mark Attempt:** If it's the first attempt in this scope, it marks the key in the `SymbolAttemptTracker`.
+6.  **L1 Cache Check:** The code proceeds to call `dataloadgenLoader.Load(key)`. The dataloader library checks its internal request-scoped cache (L1). If HIT, it returns the cached value.
+7.  **Batch Function Trigger (L1 Miss):** If L1 misses, the key is queued. Later, the `Batch Function` (`fetchDividendDates`) runs.
+8.  **L2 Cache Check:** Inside the batch function, the shared `go-cache` (L2) is checked. If HIT, the value is returned.
+9.  **API Call (L2 Miss):** If L2 misses, the (simulated) API call is made.
+10. **Cache Updates:** The result from the API is stored in the L2 cache (shared) and then returned to the dataloader, which stores it in the L1 cache (request-scoped).
+11. **Return Value:** The final value is returned to the resolver.
+
 ## 🏗️ Project Implementation Details
 
 *   **GraphQL Framework:** [`gqlgen`](https://gqlgen.com/) handles the heavy lifting of parsing GraphQL requests, mapping them to resolvers, and generating Go types from our schema. Configuration is in `gqlgen.yml`.
@@ -128,6 +142,7 @@ flowchart TD
     *   `internal/graph/symbol_definition_resolver.go`: Implements resolvers for fields on the `SymbolDefinition` type.
     *   These implementations delegate the actual business logic to functions in `internal/resolvers/`.
 *   **Dataloader Logic:** `internal/loaders/dataloaders.go` contains the `DividendDateLoader` struct (wrapping the generated loader), the `SymbolAttemptTracker` for `singleFlight` logic, the `Middleware` for context injection, and the `fetchDividendDates` batch function simulation.
+*   **Shared Memory Cache:** `internal/cache/cache.go` implements a package-level shared memory cache (using `patrickmn/go-cache`) with a default 5-minute TTL. The `fetchDividendDates` batch function checks this cache before simulating API calls.
 *   **Actual Resolver Logic:** `internal/resolvers/` contains the Go functions that perform the work for each resolver field, using the dataloader fetched from the context.
 *   **Server Entrypoint:** `cmd/server/main.go` sets up the HTTP server, wires up the `gqlgen` handler, adds transports (including WebSockets for subscriptions), and injects the dataloader middleware.
 *   **Tool Dependencies:** `tools/tools.go` uses Go's build constraint mechanism to track versions of command-line tools like `gqlgen` used during development.

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/mxcoppell/graphql-resolver-batch-cache/internal/cache"
 	"github.com/vikstrous/dataloadgen"
 )
 
@@ -48,25 +49,28 @@ func NewDividendDateLoader() *DividendDateLoader {
 
 // LoadDividendDate loads the dividend date for a symbol, handling singleFlight logic
 func (d *DividendDateLoader) LoadDividendDate(ctx context.Context, symbolName string, singleFlight bool) (*time.Time, error) {
-	// Check if the symbol has already been attempted *in this request*
+	// Check if the symbol has already been attempted *in this request scope*
 	alreadyAttempted := d.attemptTracker.IsAttempted(symbolName)
 
+	// Early exit ONLY if singleFlight=true AND it was already attempted.
 	if singleFlight && alreadyAttempted {
-		// If singleFlight=true and already attempted, return nil immediately
-		log.Printf("Symbol %s already attempted with singleFlight=true, returning nil", symbolName)
-		return nil, nil
-	} else if !singleFlight && alreadyAttempted {
-		// If singleFlight=false and already attempted, also return nil
-		log.Printf("Symbol %s already attempted with singleFlight=false, returning nil", symbolName)
+		log.Printf("Symbol %s already attempted in this scope with singleFlight=true, returning nil", symbolName)
 		return nil, nil
 	}
 
-	// If we reach here, it's the first attempt for this symbol in this request.
-	// Mark it as attempted regardless of the singleFlight flag.
-	d.attemptTracker.MarkAttempted(symbolName)
-	log.Printf("Symbol %s first attempt (singleFlight=%t), marked as attempted. Fetching...", symbolName, singleFlight)
+	// Mark as attempted on the first encounter within this request scope.
+	// This ensures subsequent singleFlight=true calls for the same key return nil.
+	if !alreadyAttempted {
+		d.attemptTracker.MarkAttempted(symbolName)
+		log.Printf("Symbol %s first attempt in this scope (singleFlight=%t), marked. Proceeding to dataloader.", symbolName, singleFlight)
+	} else {
+		// Log if it was already attempted but singleFlight is false (will proceed to dataloader)
+		log.Printf("Symbol %s already attempted in this scope, but singleFlight=false. Proceeding to dataloader.", symbolName)
+	}
 
-	// Fetch via dataloader (handles batching and caching for singleFlight=true implicitly)
+	// Proceed to the dataloader.
+	// - If first attempt: dataloader might miss, triggering batch function (which checks shared cache).
+	// - If already attempted & singleFlight=false: dataloader should hit its internal request-scoped cache.
 	return d.loader.Load(ctx, symbolName)
 }
 
@@ -88,39 +92,80 @@ func (d *DividendDateLoader) LoadManyDividendDates(ctx context.Context, symbolNa
 	return results, errors
 }
 
-// Simulate an expensive API call that fetches dividend dates for multiple symbols at once
+// fetchDividendDates is the batch function used by dataloadgen.
+// It now checks a shared cache before simulating the API call.
 func fetchDividendDates(ctx context.Context, symbolNames []string) ([]*time.Time, []error) {
+	log.Printf("DataLoader Batch Function called for keys: %v", symbolNames)
 	results := make([]*time.Time, len(symbolNames))
-	errors := make([]error, len(symbolNames))
+	errors := make([]error, len(symbolNames)) // Initialize error slice
 
-	// Simulate API latency
-	time.Sleep(500 * time.Millisecond)
+	// --- Check Shared Cache First ---
+	keysToFetchFromApi := make([]string, 0, len(symbolNames))
+	// Map API fetch index back to original results index
+	apiFetchIndexToOrigIndex := make(map[int]int, len(symbolNames))
 
-	// Simulate batch API response
 	for i, name := range symbolNames {
-		// Deterministic logic to generate dividend dates for demo purposes
-		// In reality, this would call an actual API
-		var date time.Time
-		if name == "AAPL" {
-			// One month from now
-			log.Printf("Simulating AAPL dividend date for %s", name)
-			date = time.Now().AddDate(0, 1, 0)
-		} else if name == "MSFT" {
-			// Two months from now
-			log.Printf("Simulating MSFT dividend date for %s", name)
-			date = time.Now().AddDate(0, 2, 0)
-		} else if name == "GOOG" {
-			// Three months from now
-			log.Printf("Simulating GOOG dividend date for %s", name)
-			date = time.Now().AddDate(0, 3, 0)
+		if cachedVal, found := cache.Get(name); found {
+			log.Printf("Shared cache HIT for key: %s", name)
+			results[i] = cachedVal
 		} else {
-			// For any other symbol, 6 months from now
-			log.Printf("Simulating dividend date for %s", name)
-			date = time.Now().AddDate(0, 6, 0)
+			log.Printf("Shared cache MISS for key: %s", name)
+			apiFetchIndexToOrigIndex[len(keysToFetchFromApi)] = i
+			keysToFetchFromApi = append(keysToFetchFromApi, name)
 		}
-		results[i] = &date
 	}
 
+	// --- Fetch Missing Keys from Simulated API ---
+	if len(keysToFetchFromApi) > 0 {
+		log.Printf("Calling simulated API for keys: %v", keysToFetchFromApi)
+
+		// Simulate API latency only if we need to fetch
+		time.Sleep(500 * time.Millisecond)
+
+		// Simulate batch API response for the missing keys
+		apiResults := make([]*time.Time, len(keysToFetchFromApi))
+		// Simulate potential API errors (can be nil)
+		apiErrors := make([]error, len(keysToFetchFromApi))
+
+		for i, name := range keysToFetchFromApi {
+			// Deterministic logic for demo purposes
+			var date time.Time
+			if name == "AAPL" {
+				log.Printf("Simulating API fetch for %s", name)
+				date = time.Now().AddDate(0, 1, 0)
+			} else if name == "MSFT" {
+				log.Printf("Simulating API fetch for %s", name)
+				date = time.Now().AddDate(0, 2, 0)
+			} else if name == "GOOG" {
+				log.Printf("Simulating API fetch for %s", name)
+				date = time.Now().AddDate(0, 3, 0)
+			} else {
+				log.Printf("Simulating API fetch for %s", name)
+				date = time.Now().AddDate(0, 6, 0)
+			}
+			// Only store non-nil results in the results slice for the dataloader
+			if apiErrors[i] == nil {
+				apiResults[i] = &date
+				// Add successful results to the shared cache
+				log.Printf("Adding API result for %s to shared cache", name)
+				cache.Set(name, &date)
+			} else {
+				log.Printf("Simulated API error for %s: %v", name, apiErrors[i])
+			}
+		}
+
+		// --- Populate main results slice from API results ---
+		for apiIdx, apiRes := range apiResults {
+			origIdx := apiFetchIndexToOrigIndex[apiIdx]
+			if apiErrors[apiIdx] != nil {
+				errors[origIdx] = apiErrors[apiIdx]
+			} else {
+				results[origIdx] = apiRes
+			}
+		}
+	}
+
+	log.Printf("DataLoader Batch Function finished for keys: %v", symbolNames)
 	return results, errors
 }
 

@@ -6,6 +6,7 @@ require (
 	github.com/99designs/gqlgen v0.17.72
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/vektah/gqlparser/v2 v2.5.25
 	github.com/vikstrous/dataloadgen v0.0.6
 )

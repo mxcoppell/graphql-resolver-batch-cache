@@ -110,8 +110,9 @@ flowchart TD
 
     F --> G
 
-    style Z fill:#f9f,stroke:#333,stroke-width:2px
-    style Y fill:#9cf,stroke:#333,stroke-width:2px
+    %% Removed style lines for better theme adaptation
+    %% style Z fill:#f9f,stroke:#333,stroke-width:2px
+    %% style Y fill:#9cf,stroke:#333,stroke-width:2px
 ```
 
 ## 🏗️ Project Implementation Details

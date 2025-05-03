@@ -10,8 +10,11 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gorilla/websocket"
-	customgraph "github.com/mxcoppell/graphql-resolver-batch-cache/internal" // Alias for internal package root
-	"github.com/mxcoppell/graphql-resolver-batch-cache/internal/gen/graph"
+
+	// Import the graph package containing the merged resolver logic
+	"github.com/mxcoppell/graphql-resolver-batch-cache/internal/graph"
+	// Keep generatedGraph for the schema
+	generatedGraph "github.com/mxcoppell/graphql-resolver-batch-cache/internal/gen/graph"
 	"github.com/mxcoppell/graphql-resolver-batch-cache/internal/loaders"
 )
 
@@ -23,12 +26,11 @@ func main() {
 		port = defaultPort
 	}
 
-	// Create a new GraphQL server using the custom resolver implementation from internal/resolver_root.go
-	// Note: customgraph.NewResolver() returns graph.ResolverRoot which is compatible.
-	resolver := customgraph.NewResolver() // Call the NewResolver from internal/resolver_root.go
+	// Create resolver using the unified NewResolver from internal/graph/resolver.go
+	resolver := graph.NewResolver() // Use the resolver from internal/graph
 
-	// Create a handler.Server manually
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: resolver}))
+	// Create a handler.Server manually using the generated schema and the unified resolver
+	srv := handler.New(generatedGraph.NewExecutableSchema(generatedGraph.Config{Resolvers: resolver}))
 
 	// Add transports (order might matter depending on routing library)
 	srv.AddTransport(transport.Options{})       // Needs POST, GET, etc. - Options{} provides defaults
@@ -40,6 +42,7 @@ func main() {
 	srv.AddTransport(transport.Websocket{
 		Upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
+				// Allow all origins for simplicity in demo
 				return true
 			},
 		},

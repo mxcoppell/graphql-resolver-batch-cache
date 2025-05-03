@@ -1,11 +1,10 @@
 package graph
 
+// Use the generated graph package for the interface types
 import (
-	"context"
-	"time"
-
-	"github.com/mxcoppell/graphql-resolver-batch-cache/internal/gen/graph/model"
-	"github.com/mxcoppell/graphql-resolver-batch-cache/internal/resolvers"
+	generatedGraph "github.com/mxcoppell/graphql-resolver-batch-cache/internal/gen/graph"
+	// We don't need context, time, model, or resolvers here anymore
+	// as the specific implementations are moved to other files.
 )
 
 // This file will not be regenerated automatically.
@@ -13,29 +12,28 @@ import (
 // It serves as dependency injection for your app, add any dependencies you require here.
 
 // Resolver is the root resolver struct used by gqlgen.
+// It implements the generatedGraph.ResolverRoot interface.
 type Resolver struct {
-	// Add any fields that resolvers need here
+	// Add any fields that resolvers need here, e.g., database connections
 }
 
 // NewResolver creates a new resolver instance.
-func NewResolver() *Resolver {
+func NewResolver() generatedGraph.ResolverRoot { // Return the generated interface type
 	return &Resolver{}
 }
 
-// SymbolDefinitionResolver is for providing field resolvers on the SymbolDefinition type.
-type SymbolDefinitionResolver interface {
-	NextExDividendDate(ctx context.Context, obj *model.SymbolDefinition, singleFlight *bool) (*time.Time, error)
+// Query returns the query resolver implementation satisfying generatedGraph.QueryResolver.
+func (r *Resolver) Query() generatedGraph.QueryResolver { // Use generated interface type
+	return &queryResolver{r}
+}
+
+// Subscription returns the subscription resolver implementation satisfying generatedGraph.SubscriptionResolver.
+func (r *Resolver) Subscription() generatedGraph.SubscriptionResolver { // Use generated interface type
+	return &subscriptionResolver{r}
 }
 
 // SymbolDefinition returns our SymbolDefinitionResolver implementation.
-func (r *Resolver) SymbolDefinition() SymbolDefinitionResolver {
+// It satisfies the generatedGraph.SymbolDefinitionResolver interface.
+func (r *Resolver) SymbolDefinition() generatedGraph.SymbolDefinitionResolver { // Use generated interface type
 	return &symbolDefinitionResolver{r}
-}
-
-type symbolDefinitionResolver struct{ *Resolver }
-
-// NextExDividendDate delegates to our custom resolver implementation.
-func (r *symbolDefinitionResolver) NextExDividendDate(ctx context.Context, obj *model.SymbolDefinition, singleFlight *bool) (*time.Time, error) {
-	// Delegate to our custom implementation
-	return resolvers.NextExDividendDate(ctx, obj, singleFlight)
 }

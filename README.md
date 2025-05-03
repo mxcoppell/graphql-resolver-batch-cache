@@ -168,7 +168,7 @@ Getting this up and running is easy peasy! You'll need Go (check `go.mod` for th
 
 🎉 **Server is now running!** By default, it's on port `8080`.
 
-*   **GraphQL Playground:** Head to [http://localhost:8080/](http://localhost:8080/) in your browser for an interactive API explorer.
+*   **GraphQL Playground:** Head to [http://localhost:8080/playground](http://localhost:8080/playground) in your browser for an interactive API explorer.
 *   **GraphQL Endpoint:** The actual endpoint for programmatic access is [http://localhost:8080/query](http://localhost:8080/query).
 
 ### Example Queries & Subscriptions
@@ -178,32 +178,19 @@ You can try these in the Playground:
 **Basic Query (implicitly uses `singleFlight: true`)**
 ```graphql
 query GetSymbols {
-  symbols(names: ["AAPL", "MSFT", "GOOG", "AAPL"]) { # Request AAPL twice
+  symbols(names: ["AAPL", "GOOG"]) {
     Name
-    NextExDividendDate # Check server logs - fetchDividendDates should only log AAPL once
+    NextExDividendDate
   }
 }
 ```
-
-**Query with `singleFlight: false` (returns date only on first access *per symbol instance*)**
-```graphql
-query GetSymbolsSFFalse {
-  symbols(names: ["AAPL", "MSFT", "AAPL"]) {
-    Name
-    FieldA: NextExDividendDate(singleFlight: false) # Gets date
-    FieldB: NextExDividendDate(singleFlight: false) # Gets nil for same AAPL instance
-  }
-}
-```
-*(Note: The behavior here depends on how gqlgen resolves fields. If it resolves FieldA and FieldB for the *first* AAPL object before moving to MSFT, FieldB will be nil. If it resolves FieldA for all objects then FieldB for all objects, the behavior might differ slightly based on dataloader caching vs. our attempt tracker.)*
 
 **Subscription (using `singleFlight: true` to get `nil` after first access per event)**
 ```graphql
-subscription WatchSymbolsSFTrue {
-  symbolUpdates(names: ["AAPL", "MSFT"]) {
+subscription StreamSymbolUpdates {
+  symbolUpdates(names: ["AAPL", "GOOG"]) {
     Name
-    Access1: NextExDividendDate(singleFlight: true) # Gets date on first event appearance
-    Access2: NextExDividendDate(singleFlight: true) # Gets nil for the same event
+    NextExDividendDate(singleFlight: true)
   }
 }
 ```
@@ -216,73 +203,38 @@ To really see the magic happen, run the server (`./bin/server` or `make run`) an
 
 **1. Basic Query Logs (`singleFlight: true` implicit)**
 
-When you run this query:
-
-```graphql
-query GetSymbols {
-  symbols(names: ["AAPL", "MSFT", "GOOG", "AAPL"]) {
-    Name
-    NextExDividendDate
-  }
-}
-```
-
-You should see logs similar to this (timestamps and exact order might vary slightly):
-
-```log
-YYYY/MM/DD HH:MM:SS Query.symbols called with 4 symbols
-YYYY/MM/DD HH:MM:SS Symbol AAPL first attempt (singleFlight=true), marked as attempted. Fetching...
-YYYY/MM/DD HH:MM:SS Symbol MSFT first attempt (singleFlight=true), marked as attempted. Fetching...
-YYYY/MM/DD HH:MM:SS Symbol GOOG first attempt (singleFlight=true), marked as attempted. Fetching...
-# --- Dataloader batch function starts ---
-YYYY/MM/DD HH:MM:SS Simulating AAPL dividend date for AAPL
-YYYY/MM/DD HH:MM:SS Simulating MSFT dividend date for MSFT
-YYYY/MM/DD HH:MM:SS Simulating GOOG dividend date for GOOG
-# --- Dataloader batch function ends ---
-YYYY/MM/DD HH:MM:SS Symbol AAPL already attempted with singleFlight=true, returning nil
-```
-
-**Explanation:**
-
-*   `Query.symbols called`: The top-level query resolver runs.
-*   `Symbol ... first attempt`: The `NextExDividendDate` resolver is called for the *first* instance of each unique symbol (`AAPL`, `MSFT`, `GOOG`). Our `LoadDividendDate` function logs this and marks them as attempted.
-*   `Simulating...`: The `fetchDividendDates` batch function runs *once* with the unique keys (`AAPL`, `MSFT`, `GOOG`). Notice `AAPL` is only fetched once, even though it was requested twice in the query! This is the DataLoader **batching** in action.
-*   `Symbol AAPL already attempted... returning nil`: When the resolver encounters the *second* `AAPL` in the query list, our `LoadDividendDate` function sees it was already attempted (because `singleFlight` defaults to true) and correctly returns `nil` as per the logic we added.
-
-**2. Subscription Logs (`singleFlight: true` explicit)**
-
 When you run this subscription:
 
 ```graphql
-subscription WatchSymbolsSFTrue {
-  symbolUpdates(names: ["AAPL", "MSFT"]) {
+subscription StreamSymbolUpdates {
+  symbolUpdates(names: ["AAPL", "GOOG"]) {
     Name
-    Access1: NextExDividendDate(singleFlight: true)
-    Access2: NextExDividendDate(singleFlight: true)
+    NextExDividendDate(singleFlight: true)
   }
 }
 ```
 
-You'll get periodic updates. For the *first* update event for `AAPL`, the logs might look like this:
+You'll get periodic updates.
+You should see logs similar to this (timestamps and exact order might vary slightly):
 
 ```log
-YYYY/MM/DD HH:MM:SS Subscription.symbolUpdates called with 2 symbols
-# ... ticker starts ...
-YYYY/MM/DD HH:MM:SS Sending update for symbol AAPL
-YYYY/MM/DD HH:MM:SS Symbol AAPL first attempt (singleFlight=true), marked as attempted. Fetching...  # Access1
-# --- Dataloader batch function starts (for this event) ---
+YYYY/MM/DD HH:MM:SS Query.symbols called with 2 symbols
+YYYY/MM/DD HH:MM:SS Symbol AAPL first attempt (singleFlight=true), marked as attempted. Fetching...
+YYYY/MM/DD HH:MM:SS Symbol GOOG first attempt (singleFlight=true), marked as attempted. Fetching...
+# --- Dataloader batch function starts ---
 YYYY/MM/DD HH:MM:SS Simulating AAPL dividend date for AAPL
-# --- Dataloader batch function ends (for this event) ---
-YYYY/MM/DD HH:MM:SS Symbol AAPL already attempted with singleFlight=true, returning nil            # Access2
+YYYY/MM/DD HH:MM:SS Simulating GOOG dividend date for GOOG
+# --- Dataloader batch function ends ---
+YYYY/MM/DD HH:MM:SS Symbol AAPL already attempted with singleFlight=true, returning nil
+YYYY/MM/DD HH:MM:SS Symbol GOOG already attempted with singleFlight=true, returning nil
 ```
 
 **Explanation:**
 
-*   `Subscription.symbolUpdates called`: The subscription resolver starts.
-*   `Sending update for symbol AAPL`: The goroutine sends the first `AAPL` object.
-*   `Symbol AAPL first attempt...`: The resolver for `Access1: NextExDividendDate` runs. Since it's the first time seeing "AAPL" *for this specific event's context*, it marks it and triggers the dataloader fetch.
-*   `Simulating AAPL...`: The batch function runs for this event.
-*   `Symbol AAPL already attempted... returning nil`: The resolver for `Access2: NextExDividendDate` runs immediately after for the *same* `AAPL` object within the same event context. Because `singleFlight` is true and it was *just* marked as attempted by `Access1`, it correctly returns `nil`.
+*   `Subscription.symbolUpdates called with 2 symbols`: The top-level query resolver runs.
+*   `Symbol ... first attempt`: The `NextExDividendDate` resolver is called for the *first* instance of each unique symbol (`AAPL`, `GOOG`). Our `LoadDividendDate` function logs this and marks them as attempted.
+*   `Simulating...`: The `fetchDividendDates` batch function runs *once* with the unique keys (`AAPL`, `GOOG`). Notice `AAPL` is only fetched once, even though it was requested twice in the query! This is the DataLoader **batching** in action.
+*   `Symbol AAPL already attempted... returning nil`: When the resolver encounters the *second* `AAPL` in the query list, our `LoadDividendDate` function sees it was already attempted (because `singleFlight` defaults to true) and correctly returns `nil` as per the logic we added.
 
 The key takeaway for subscriptions is that the dataloader and the attempt tracker are **scoped to each event processing cycle**, providing fresh state for every message pushed to the client, while still allowing fine-grained control *within* that cycle using `singleFlight`.
 

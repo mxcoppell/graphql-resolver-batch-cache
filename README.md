@@ -134,7 +134,7 @@ flowchart TD
 
 ## 🛠️ How to Build and Run
 
-Getting this up and running is easy peasy! You'll need Go (check `go.mod` for the version, 1.21+ recommended) and Make installed.
+Getting this up and running is easy peasy! You'll need Go (check `go.mod` for the version, 1.23.8+ recommended) and Make installed.
 
 1.  **Install Go Dependencies:**
     ```bash
